@@ -7,7 +7,7 @@
  Notes:
  1. To run this plugin you need to install the fitgem gem first:
  $ sudo gem install fitgem
- 2. Afterwards you need to aquire a valid Fitbit Consumer token: http://dev.fitbit.com
+ 2. Afterwards you can aquire a valid Fitbit Consumer token: http://dev.fitbit.com if you want to use your own. A default one is provided.
  3. Upon first start, the plugin will ask you to open a URL and authorize the access to your data
 
 =end
@@ -21,10 +21,12 @@ config = {
     'fitbit_consumer_secret' => '',
     'fitbit_oauth_token' => '',
     'fitbit_oauth_secret' => '',
+    'fitbit_unit_system' => 'US',
     'fitbit_tags' => '#activities',
     'fitbit_log_water' => false,
     'fitbit_log_body_measurements' => true,
     'fitbit_log_sleep' => true,
+    'fitbit_log_food' => false
 }
 
 $slog.register_plugin({ 'class' => 'FitbitLogger', 'config' => config })
@@ -56,32 +58,45 @@ class FitbitLogger < Slogger
         fitbit_consumer_key = config['fitbit_consumer_key']
         fitbit_consumer_secret = config['fitbit_consumer_secret']
 
-        client = Fitgem::Client.new(:consumer_key => fitbit_consumer_key, :consumer_secret => fitbit_consumer_secret, :unit_system => config['fitbit_unit_system'])
+        client = Fitgem::Client.new(:consumer_key => fitbit_consumer_key, :consumer_secret => fitbit_consumer_secret, :unit_system => translateUnitSystem(config['fitbit_unit_system']))
         developMode = $options[:develop]
 
 
         # ============================================================
         # request oauth token if needed
-
-        if  oauth_token != '' && oauth_secret != ''
+        @log.info("#{oauth_token}")
+        if  !oauth_token.nil? && !oauth_secret.nil? && !oauth_token.empty? && !oauth_secret.empty?
             access_token = client.reconnect(oauth_token, oauth_secret)
-            else
+        else
             request_token = client.request_token
             token = request_token.token
             secret = request_token.secret
+            @log.info("Fitbit requires configuration, please run from the command line and follow the prompts")
+            puts
+            puts "------------- Fitbit Configuration --------------"
+            puts "Slogger will now open an authorization page in your default web browser. Copy the code you receive and return here."
+            print "Press Enter to continue..."
+            gets
+            %x{open "http://www.fitbit.com/oauth/authorize?oauth_token=#{token}"}
+            print "Paste the code you received here: "
+            verifier = gets.strip
 
-            @log.info("Go to http://www.fitbit.com/oauth/authorize?oauth_token=#{token} and then enter the verifier code below")
-            verifier = gets.chomp
+            begin
+                access_token = client.authorize(token, secret, { :oauth_verifier => verifier })
 
-            access_token = client.authorize(token, secret, { :oauth_verifier => verifier })
-            if developMode
-                @log.info("Verifier is: "+verifier)
-                @log.info("Token is:    "+access_token.token)
-                @log.info("Secret is:   "+access_token.secret)
+                if developMode
+                    @log.info("Verifier is: "+verifier)
+                    @log.info("Token is:    "+access_token.token)
+                    @log.info("Secret is:   "+access_token.secret)
+                end
+
+                config['fitbit_oauth_token'] = access_token.token;
+                config['fitbit_oauth_secret'] = access_token.secret
+                @log.info("Fitbit successfully configured, run Slogger again to continue")
+            rescue
+                @log.error("Failed to authorize Fitbit. Please try again")
             end
-
-            config['fitbit_oauth_token'] = access_token.token;
-            config['fitbit_oauth_secret'] = access_token.secret
+            return config
         end
 
         # ============================================================
@@ -101,10 +116,12 @@ class FitbitLogger < Slogger
             distance = summary['distances'][0]['distance']
             distanceUnit = client.label_for_measurement(:distance, false)
             activityPoints = summary['activeScore']
+            foodsEaten = ""
 
             if config['fitbit_log_body_measurements']
                 measurements = client.body_measurements_on_date(timestring)
                 weight = measurements['body']['weight']
+                bmi = measurements['body']['bmi']
                 fat = measurements['body']['fat']
                 weightUnit = client.label_for_measurement(:weight, false)
             end
@@ -115,57 +132,108 @@ class FitbitLogger < Slogger
                 waterUnit = client.label_for_measurement(:liquids, false)
             end
             if config['fitbit_log_sleep']
-                sleepData = client.sleep_on_date(timestring)
-                sleepStart = sleepData['sleep'][0]['startTime'].split("T")[1][0..4]
-                sleepDuration = sleepData['sleep'][0]['timeInBed']
-                sleepFallAsleep = sleepData['sleep'][0]['minutesToFallAsleep']
-                sleepEfficiency = sleepData['sleep'][0]['efficiency']
-                sleepMinutesAsleep = sleepData['summary']['totalMinutesAsleep']
-                awakeningsCount = sleepData['sleep'][0]['awakeningsCount']
+                sleep = client.sleep_on_date(timestring)
+                sleepSummary = sleep['summary']
 
-                sleepDurationHour = sleepDuration / 60
-                sleepDurationMinute = sleepDuration % 60
-                sleepMinutesAsleepHour = sleepMinutesAsleep / 60
-                sleepMinutesAsleepMinute = sleepMinutesAsleep % 60
+
+                hoursInBed = sleepSummary['totalTimeInBed'] / 60
+                minutesInBed = sleepSummary['totalTimeInBed'] - (hoursInBed * 60)
+                timeInBed = "#{hoursInBed}h #{minutesInBed}min"
+
+                hoursAsleep = sleepSummary['totalMinutesAsleep'] / 60
+                minutesAsleep = sleepSummary['totalMinutesAsleep'] - (hoursAsleep * 60)
+                timeAsleep = "#{hoursAsleep}h #{minutesAsleep}min"
+
+                if sleepSummary['totalTimeInBed'] > 0
+                    sleepData = sleep['sleep'][0]
+                    sleepStart = sleepData['startTime'].split("T")[1][0..4]
+                    sleepFallAsleep = sleepData['minutesToFallAsleep']
+                    sleepEfficiency = sleepData['efficiency']
+                    awakeningsCount = sleepData['awakeningsCount']
+
+                    sleepStartMin = Integer(sleepStart.split(":")[0]) * 60 + Integer(sleepStart.split(":")[1])
+                    sleepStopMin = sleepStartMin + sleepSummary['totalTimeInBed']
+
+                    if sleepStopMin > 1440
+                        sleepStopMin = sleepStopMin - 1440
+                    end
+
+                    awakeHour = sleepStopMin / 60
+                    awakeMinutes =  sleepStopMin % 60
+                    sleepStop = "#{awakeHour}:#{awakeMinutes}"
+                end
 
             end
 
+            if config['fitbit_log_food']
+                foodData = client.foods_on_date(timestring)
+                foods = foodData['foods']
 
+                mealList = Hash.new
+                foodsEaten = ""
+                totalCalories = 0
+                foods.each do |foodEntry|
+                    food = foodEntry['loggedFood']
+                    mealId = food['mealTypeId']
+                    if !mealList.has_key?(mealId)
+                        mealList[mealId] = Meal.new(translateMeal(mealId))
+                    end
+                    meal = mealList[mealId]
+                    meal.addFood(food['name'],food['amount'],food['unit']['plural'],food['calories'])
+                end
+                mealList.each do |key,meal|
+                    foodsEaten += meal.to_s
+                    totalCalories += meal.calories
+                end
+
+            end
 
             if developMode
                 @log.info("Steps: #{steps}")
                 @log.info("Distance: #{distance} #{distanceUnit}")
+                @log.info("Floors: #{floors}")
+                @log.info("ActivityPoints: #{activityPoints}")
 				@log.info("Weight: #{weight} #{weightUnit}")
-				@log.info("Body Fat: #{fat}%")
-                @log.info{"Sleep Start: #{sleepStart}"}
-                @log.info("Sleep duration: #{sleepDurationHour} Hours #{sleepDurationMinute} Minutes")
-                @log.info("Minutes to Fall Asleep: #{sleepFallAsleep}")
-                @log.info("Awakening Count: #{awakeningsCount}")
-                @log.info("minutesAsleep: #{minutesAsleep}")
-                @log.info("efficiency: #{sleepEfficiency}")
+				@log.info("BMI: #{bmi}")
+				@log.info("Water Intake: #{loggedWater} #{waterUnit}")
+                @log.info("Time In Bed: #{timeInBed}")
+                @log.info("Time Asleep: #{timeAsleep}")
+                @log.info("Foods Eaten:\n #{foodsEaten}")
             end
 
             tags = config['fitbit_tags'] || ''
             tags = "\n\n#{tags}\n" unless tags == ''
 
-            output = "**Steps:** #{steps}\n**Distance:** #{distance} #{distanceUnit}\n\n"
-
-            if config['fitbit_log_body_measurements']
-                output += "**Weight:** #{weight} #{weightUnit}\n**Body Fat:** #{fat}%\n\n"
+            if steps > 0
+                output = "**Steps:** #{steps}\n**Distance:** #{distance} #{distanceUnit}\n\n"
+            else
+                output = "No steps recorded today.\n\n"
             end
             if config['fitbit_log_water']
             	output += "**Water Intake:** #{loggedWater} #{waterUnit}\n"
             end
-
             if config['fitbit_log_sleep']
-                output += "**Sleep Start:** #{sleepStart}\n"
-                output += "**In Bed For:** #{sleepDurationHour} Hours #{sleepDurationMinute} Minutes\n"
-                output += "**Minutes To Fall Asleep:** #{sleepFallAsleep}\n"
-                output += "**Time Spent Asleep:** #{sleepMinutesAsleepHour} Hours #{sleepMinutesAsleepMinute} Minutes\n"
-                output += "**Awakening Count:** #{awakeningsCount}\n"
-                output += "**Sleep Efficiency:** #{sleepEfficiency}%"
+                if sleepSummary['totalTimeInBed'] > 0
+                    output += "**Sleep Start:** #{sleepStart}\n"
+                    output += "**Sleep Stop:** #{sleepStop}\n"
+                    output += "**In Bed For:** #{timeInBed}\n"
+                    output += "**Minutes To Fall Asleep:** #{sleepFallAsleep}\n"
+                    output += "**Awakening Count:** #{awakeningsCount}\n"
+                    output += "**Time Spent Asleep:** #{timeAsleep}\n"
+                    output += "**Sleep Efficiency:** #{sleepEfficiency}%\n\n"
+                else
+                    output += "No sleep recorded today.\n\n"
+                end
+            if config['fitbit_log_body_measurements']
+                output += "**Weight:** #{weight} #{weightUnit}\n**Body Fat:** #{fat}%\n\n"
+            else
+                output += "No weight recorded today."
             end
 
+            end
+            if config['fitbit_log_food']
+                output += "**Foods eaten:** #{totalCalories} calories\n#{foodsEaten}"
+            end
 
             # Create a journal entry
             options = {}
@@ -177,4 +245,59 @@ class FitbitLogger < Slogger
         end
         return config
     end
+
+    def translateMeal(mealId)
+        case mealId
+        when 1
+            return "Breakfast"
+        when 2
+            return "Morning Snack"
+        when 3
+            return "Lunch"
+        when 4
+            return "Afternoon Snack"
+        when 5
+            return "Dinner"
+        else
+            return "Anytime"
+        end
+    end
+
+    def translateUnitSystem(unitSystemString)
+        case unitSystemString
+        when "US"
+            return Fitgem::ApiUnitSystem.US
+        when "METRIC"
+            return Fitgem::ApiUnitSystem.METRIC
+        when "UK"
+            return Fitgem::ApiUnitSystem.UK
+        else
+            return Fitgem::ApiUnitSystem.US
+        end
+    end
 end
+class Meal
+    def initialize(name)
+        @name = name
+        @foods = Array.new
+        @calories = 0
+    end
+    def addFood(name, amount, unit, calories)
+        @foods.push("#{name} (#{amount} #{unit}, #{calories} calories)")
+        @calories += calories
+    end
+
+    def to_s
+        mealString = " * #{@name}: #{@calories} calories\n"
+        @foods.each do |food|
+            mealString += "  * #{food}\n"
+        end
+        return mealString
+    end
+
+    def calories
+        @calories
+    end
+end
+
+
