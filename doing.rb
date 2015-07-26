@@ -11,7 +11,7 @@ Notes:
 config = {
   'description' => ['doing plugin',
                     'Adds doing yesterday to dayone' ],
-  'tags' => '#doing'
+  'doing_tags' => '#doing'
 }
 $slog.register_plugin({ 'class' => 'DoingLogger', 'config' => config })
 
@@ -25,7 +25,7 @@ class DoingLogger < Slogger
     end
     @log.info("Logging doing time tracking for yesterday")
 
-    tags = config['tags'] || ''
+    tags = config['doing_tags'] || ''
     tags = "\n\n#{tags}\n" unless @tags == ''
     output = %x{doing yesterday --totals}
 
