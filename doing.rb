@@ -1,12 +1,11 @@
 =begin
-Plugin: My New Logger
-Description: Brief description (one line)
-Author: [My Name](My URL)
+Plugin: doing yesterday logger
+Version: 0.1
+Description: Logs output for doing yesterday --totals
+Author: [soleblaze](https://github.com/soleblaze)
 Configuration:
-  option_1_name: [ "example_value1" , "example_value2", ... ]
-  option_2_name: example_value
+  doing_tags: #doing
 Notes:
-  - multi-line notes with additional description and information (optional)
 =end
 
 config = {
