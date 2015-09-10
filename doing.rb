@@ -43,8 +43,10 @@ class DoingLogger < Slogger
     # Create a journal entry
     # to_dayone accepts all of the above options as a hash
     # generates an entry base on the datestamp key or defaults to "now"
-    sl = DayOne.new
-    sl.to_dayone(options)
+    unless output.nil? or output == "\n\n"
+      sl = DayOne.new
+      sl.to_dayone(options)
+    end
 
     # To create an image entry, use `sl.to_dayone(options) if
     # sl.save_image(imageurl,options['uuid'])`
