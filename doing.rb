@@ -27,7 +27,7 @@ class DoingLogger < Slogger
 
     tags = config['doing_tags'] || ''
     tags = "\n\n#{tags}\n" unless @tags == ''
-    output = %x{doing yesterday --totals}
+    output = %x{~/bin/doing yesterday --totals}
 
     # Perform necessary functions to retrieve posts
 
