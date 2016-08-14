@@ -29,9 +29,6 @@ $slog.register_plugin({ 'class' => 'FitbitLogger', 'config' => config })
 require 'rubygems'
 require 'fitgem'
 require 'time'
-require 'base64'
-require 'net/http'
-require 'json'
 
 class FitbitLogger < Slogger
   def do_log
