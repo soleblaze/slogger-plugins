@@ -61,7 +61,7 @@ class TwitterLogger < Slogger
     options = {}
     options['content'] = "#{tweet[:text]}\n\n-- [@#{tweet[:screen_name]}](https://twitter.com/#{tweet[:screen_name]}/status/#{tweet[:id]})\n\n(#{@twitter_config['twitter_tags']})\n"
     #tweet_time = Time.parse(tweet[:date].to_s)
-    options['datestamp'] = currentDate.utc.iso8601
+    options['datestamp'] = Time.now.utc.iso8601
 
     sl = DayOne.new
     
@@ -286,7 +286,7 @@ class TwitterLogger < Slogger
         dated_tweets.each {|k,v|
           content = "## Favorite Tweets\n\n### Favorites from @#{user} on #{Time.parse(k).strftime(@date_format)}\n\n"
           content << digest_entry(v, tags)
-          sl.to_dayone({'content' => content, 'datestamp' => Time.parse(k).utc.iso8601})
+          sl.to_dayone({'content' => content, 'datestamp' => Time.now.utc.iso8601})
           if @twitter_config['save_images_from_favorites']
             v.select {|t| !t[:images].empty? }.each {|t| self.single_entry(t) }
           end
