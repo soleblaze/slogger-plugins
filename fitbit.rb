@@ -208,7 +208,7 @@ class FitbitLogger < Slogger
       tags = "\n\n#{tags}\n" unless tags == ''
 
       if steps > 0
-        output = "**Steps:** #{steps}\n**Distance:** #{distance} #{distanceUnit}\n\n"
+        output = "**Steps:** #{steps}\n**Floors:** #{floors}\n**Distance:** #{distance} #{distanceUnit}\n\n"
       else
         output = "No steps recorded today.\n\n"
       end
