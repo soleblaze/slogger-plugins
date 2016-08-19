@@ -80,22 +80,23 @@ class FitbitLogger < Slogger
       response_json = JSON.parse(response.body)
       refresh_token = response_json['refresh_token']
       config['fitbit_refresh_token'] = refresh_token
+      access_token = response_json['access_token']
+    else
+      # Grab a token to use in the request
+      uri = URI.parse(token_url)
+      http = Net::HTTP.new(uri.host, uri.port)
+      http.use_ssl = true
+      request = Net::HTTP::Post.new(uri.request_uri)
+      request.basic_auth(fitbit_client_id, fitbit_client_secret)
+      request['Content-Type'] = 'application/x-www-form-urlencoded'
+      request.set_form_data(
+        'grant_type' => 'refresh_token',
+        'refresh_token' => refresh_token)
+      response = http.request(request)
+      response_json = JSON.parse(response.body)
+      config['fitbit_refresh_token'] = response_json['refresh_token']
+      access_token = response_json['access_token']
     end
-
-    # Grab a token to use in the request
-    uri = URI.parse(token_url)
-    http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = true
-    request = Net::HTTP::Post.new(uri.request_uri)
-    request.basic_auth(fitbit_client_id, fitbit_client_secret)
-    request['Content-Type'] = 'application/x-www-form-urlencoded'
-    request.set_form_data(
-      'grant_type' => 'refresh_token',
-      'refresh_token' => refresh_token)
-    response = http.request(request)
-    response_json = JSON.parse(response.body)
-    config['fitbit_refresh_token'] = response_json['refresh_token']
-    access_token = response_json['access_token']
 
     # Connect to api.fitbit.com
     client = Fitgem::Client.new(consumer_key: fitbit_client_id, consumer_secret: fitbit_client_secret, token: access_token)
