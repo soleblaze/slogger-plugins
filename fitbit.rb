@@ -5,8 +5,11 @@
  Modified By: Kevin Burns
 
  Notes:
- 1. To run this plugin you need to add the followine to the Gemfile and run bundle update:
-    gem 'fitgem', :git => 'git://github.com/whazzmaster/fitgem'
+  1. To run this plugin you need to install the git version fitgem gem first. The easiest way to do this is to run the following commands:
+     git clone https://github.com/whazzmaster/fitgem
+     cd fitgem
+     rake build
+     sudo gem install pkg/fitgem-1.0.0.gem
  2. Afterwards you can aquire a valid Fitbit Client id and client secret: http://dev.fitbit.com if you want to use your own. A default one is provided. Note: use https://localhost:3000 as your redirect URL
  3. Upon first start, the plugin will ask you to open a URL and authorize the access to your data
 
